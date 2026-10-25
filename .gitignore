@@ -1,0 +1,46 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.json
+.terraform.lock.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Sensitive files
+*.env
+.env.*
+secrets/
+*.pem
+*.key
+
+# Drift detection artifacts (committed per-cycle in drift-evidence/, excluded from root)
+/drift-events.jsonl
+/drift-summary.json
+/plan.json
+/plan-output.txt
+/e2e-test-results.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo

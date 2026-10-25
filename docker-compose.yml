@@ -1,0 +1,63 @@
+# docker-compose.yml — Local monitoring stack (Prometheus + Grafana + Exporter)
+
+version: "3.8"
+
+services:
+  #  Drift Metrics Exporter
+  drift-metrics-exporter:
+    build:
+      context: .
+      dockerfile: monitoring/Dockerfile.exporter
+    container_name: drift-metrics-exporter
+    volumes:
+      - ./drift-events.jsonl:/app/drift-events.jsonl:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: drift-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - drift-metrics-exporter
+    restart: unless-stopped
+
+  #  Grafana
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: drift-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=driftdetection
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # Auto-provision Prometheus datasource
+      - GF_DATASOURCES_DEFAULT_DATASOURCE_NAME=Prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,6 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY scripts/log_drift_event.py ./scripts/
+COPY monitoring/metrics_exporter.py ./monitoring/
+RUN pip install --no-cache-dir boto3 requests
+CMD ["python", "monitoring/metrics_exporter.py", "--events-file", "/app/drift-events.jsonl", "--port", "8000"]

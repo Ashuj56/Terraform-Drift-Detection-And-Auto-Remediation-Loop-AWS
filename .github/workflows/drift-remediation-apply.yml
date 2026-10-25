@@ -1,0 +1,189 @@
+# CI Approval Gate & Terraform Apply
+#
+# Handled events:
+#   1. pull_request: types [opened]
+#      Checks if the PR is LOW_RISK with no destructive actions, and enables auto-merge.
+#   2. pull_request: types [closed]
+#      When a drift-fix PR is merged into main (after either auto-merge or human approval),
+#      assumes the least-privilege Drift Remediation IAM Role and runs `terraform apply`.
+
+name: "Drift Remediation Apply"
+
+on:
+  pull_request:
+    types: [opened, closed]
+    branches: [main]
+
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
+permissions:
+  id-token: write       # Required for AWS OIDC
+  contents: write       # Required for auto-merge and status updates
+  pull-requests: write  # Required for PR comments & reviewer workflow
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: terraform
+  TF_VERSION: "1.5.7"
+
+jobs:
+  # ── Job 1: Auto-merge for LOW_RISK PRs (on PR open) ─────────────────────────
+  auto-merge-low-risk:
+    name: "Evaluate Auto-Merge (Low-Risk)"
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'opened' &&
+      startsWith(github.event.pull_request.head.ref, 'drift-fix-')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Evaluate risk & destructive flags
+        id: check
+        run: |
+          if [ -f "drift-evidence/drift-summary.json" ]; then
+            AUTO=$(jq -r '.auto_apply' drift-evidence/drift-summary.json)
+            DESTRUCTIVE=$(jq -r '.has_destructive_changes' drift-evidence/drift-summary.json)
+            RISK=$(jq -r '.overall_risk' drift-evidence/drift-summary.json)
+            CYCLE_ID=$(jq -r '.cycle_id' drift-evidence/drift-summary.json)
+
+            echo "auto_apply=$AUTO" >> $GITHUB_OUTPUT
+            echo "destructive=$DESTRUCTIVE" >> $GITHUB_OUTPUT
+            echo "risk_level=$RISK" >> $GITHUB_OUTPUT
+            echo "cycle_id=$CYCLE_ID" >> $GITHUB_OUTPUT
+            echo "Evaluated: risk=$RISK, auto_apply=$AUTO, destructive=$DESTRUCTIVE, cycle=$CYCLE_ID"
+          else
+            echo "auto_apply=false" >> $GITHUB_OUTPUT
+            echo "destructive=true" >> $GITHUB_OUTPUT
+            echo "risk_level=HIGH_RISK" >> $GITHUB_OUTPUT
+            echo "cycle_id=unknown" >> $GITHUB_OUTPUT
+            echo "No drift-summary.json found — default to safe manual review"
+          fi
+
+      - name: Enable auto-merge (LOW_RISK with NO destructive changes)
+        if: steps.check.outputs.auto_apply == 'true' && steps.check.outputs.destructive != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DRIFT_GITHUB_TOKEN || secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Enabling auto-merge for PR #${{ github.event.pull_request.number }}..."
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --auto \
+            --squash \
+            --subject "chore: auto-apply low-risk drift remediation (${{ steps.check.outputs.cycle_id }})"
+          echo "✅ Auto-merge enabled successfully."
+
+  # ── Job 2: Terraform Apply (post-merge) ──────────────────────────────────────
+  apply:
+    name: "Terraform Apply (Post-Approval)"
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'drift-fix-')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials via OIDC (Remediation Role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DRIFT_REMEDIATION_ROLE_ARN || secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-DriftRemediation
+
+      - name: Determine apply mode & cycle ID
+        id: risk
+        run: |
+          if [ -f "drift-evidence/drift-summary.json" ]; then
+            RISK=$(jq -r '.overall_risk' drift-evidence/drift-summary.json)
+            AUTO=$(jq -r '.auto_apply' drift-evidence/drift-summary.json)
+            CYCLE_ID=$(jq -r '.cycle_id' drift-evidence/drift-summary.json)
+            echo "risk_level=$RISK" >> $GITHUB_OUTPUT
+            echo "auto_apply=$AUTO" >> $GITHUB_OUTPUT
+            echo "cycle_id=$CYCLE_ID" >> $GITHUB_OUTPUT
+          else
+            echo "risk_level=HIGH_RISK" >> $GITHUB_OUTPUT
+            echo "auto_apply=false" >> $GITHUB_OUTPUT
+            echo "cycle_id=drift-cycle-manual" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Terraform Apply (reconcile live resources)
+        id: apply
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "Applying remediation for cycle: ${{ steps.risk.outputs.cycle_id }}"
+          echo "Risk Level: ${{ steps.risk.outputs.risk_level }}"
+
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            2>&1 | tee apply-output.txt
+
+          echo "✅ Terraform apply completed successfully"
+
+      - name: Setup Python
+        if: always()
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Log remediation event
+        if: always()
+        run: |
+          python scripts/log_drift_event.py \
+            --action apply \
+            --cycle-id "${{ steps.risk.outputs.cycle_id }}" \
+            --status "${{ job.status }}" \
+            --risk-level "${{ steps.risk.outputs.risk_level }}" \
+            --auto-apply "${{ steps.risk.outputs.auto_apply }}" \
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --pr-url "${{ github.event.pull_request.html_url }}"
+
+      - name: Comment on PR (apply result)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.DRIFT_GITHUB_TOKEN || secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          STATUS="${{ job.status }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          RISK="${{ steps.risk.outputs.risk_level }}"
+          CYCLE_ID="${{ steps.risk.outputs.cycle_id }}"
+
+          if [ "$STATUS" = "success" ]; then
+            ICON="✅"
+            MESSAGE="Drift remediation applied successfully.\nInfrastructure is now back in sync with Terraform state."
+          else
+            ICON="❌"
+            MESSAGE="Drift remediation FAILED. Check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for error logs."
+          fi
+
+          gh pr comment "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --body "${ICON} **Remediation ${STATUS}** (Cycle: \`${CYCLE_ID}\` | Risk: ${RISK})
+
+${MESSAGE}
+
+Reconciliation completed at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

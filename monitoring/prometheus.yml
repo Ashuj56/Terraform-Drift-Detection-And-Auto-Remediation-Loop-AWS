@@ -1,0 +1,14 @@
+# Prometheus scrape configuration for the drift detection metrics exporter
+
+global:
+  scrape_interval: 60s
+  evaluation_interval: 60s
+
+scrape_configs:
+  - job_name: "drift-detection"
+    static_configs:
+      - targets: ["drift-metrics-exporter:8000"]
+    metrics_path: "/metrics"
+    scrape_interval: 60s
+    scrape_timeout: 10s
+    honor_labels: true
