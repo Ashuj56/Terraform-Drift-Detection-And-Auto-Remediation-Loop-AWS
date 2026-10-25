@@ -51,6 +51,17 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false  # Disable wrapper so exit codes pass through cleanly
+      - name: Debug GitHub OIDC Token Claims
+        run: |
+          # Fetch the raw OIDC token from GitHub
+          TOKEN=$(curl -sLS -H "User-Agent: actions/oidc-client" \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
+          
+          # Decode the payload (Base64) to show the exact claims sent to AWS
+          echo "=== OIDC CLAIMS RECEIVED FROM GITHUB ==="
+          python3 -c "import sys, json, base64; token=sys.argv[1].split('.')[1]; padding=len(token)%4; token += '='*padding if padding else ''; print(json.dumps(json.loads(base64.urlsafe_b64decode(token)), indent=2))" "$TOKEN"
+
 
       - name: Configure AWS credentials via OIDC (Detection Role)
         uses: aws-actions/configure-aws-credentials@v4
