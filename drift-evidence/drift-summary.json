@@ -1,0 +1,36 @@
+{
+  "cycle_id": "drift-cycle-20261025-201029-7db4d0",
+  "detected_at": "2026-10-25T20:10:29.684382+00:00",
+  "overall_risk": "HIGH_RISK",
+  "auto_apply": false,
+  "has_destructive_changes": false,
+  "resource_count": 1,
+  "high_risk_count": 1,
+  "low_risk_count": 0,
+  "drift_events": [
+    {
+      "resource_address": "module.iam.aws_iam_role.drift_detection",
+      "resource_type": "aws_iam_role",
+      "physical_resource_id": "drift-detection-drift-detection-role",
+      "module": "module.iam",
+      "actions": [
+        "update"
+      ],
+      "risk_level": "HIGH_RISK",
+      "risk_reasons": [
+        "critical_resource_type: 'aws_iam_role' requires mandatory human approval",
+        "non_trivial_attributes: assume_role_policy"
+      ],
+      "changed_attributes": [
+        "assume_role_policy"
+      ],
+      "attribute_diffs": [
+        {
+          "attribute": "assume_role_policy",
+          "before": "{\"Statement\":[{\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\"},\"StringLike\":{\"token.actions.githubusercontent.com:sub\":\"repo:Ashuj56@177546286/Terraform-Drift-Detection-And-Auto-Remediation-Loop-AWS@1432545657:*\"}},\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::848647692924:oidc-provider/token.actions.githubusercontent.com\"}}],\"Version\":\"2012-10-17\"}",
+          "after": "{\"Statement\":[{\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\"},\"StringLike\":{\"token.actions.githubusercontent.com:sub\":[\"repo:Ashuj56/Terraform-Drift-Detection-And-Auto-Remediation-Loop-AWS:*\",\"repo:ashuj56/Terraform-Drift-Detection-And-Auto-Remediation-Loop-AWS:*\",\"repo:Ashuj56/terraform-drift-detection-and-auto-remediation-loop-aws:*\",\"repo:ashuj56/terraform-drift-detection-and-auto-remediation-loop-aws:*\"]}},\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::848647692924:oidc-provider/token.actions.githubusercontent.com\"}}],\"Version\":\"2012-10-17\"}"
+        }
+      ]
+    }
+  ]
+}
