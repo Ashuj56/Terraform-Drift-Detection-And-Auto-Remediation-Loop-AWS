@@ -71,8 +71,11 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 
   client_id_list = ["sts.amazonaws.com"]
 
-  # GitHub's OIDC thumbprint (stable — GitHub publishes this)
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+  # GitHub's OIDC thumbprints (includes primary and backup rotated thumbprints)
+  thumbprint_list = [
+    "6938fd4d98bab03faadb97b34396831e3780aea1",
+    "1c5876884dc74a7e832508ba7d254924d52e5a6e"
+  ]
 
   tags = {
     Name = "${var.project_name}-github-oidc"
@@ -96,7 +99,12 @@ resource "aws_iam_role" "drift_detection" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_org}/${var.github_repo}:*",
+            "repo:${lower(var.github_org)}/${var.github_repo}:*",
+            "repo:${var.github_org}/${lower(var.github_repo)}:*",
+            "repo:${lower(var.github_org)}/${lower(var.github_repo)}:*"
+          ]
         }
       }
     }]
@@ -169,7 +177,12 @@ resource "aws_iam_role" "drift_remediation" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_org}/${var.github_repo}:*",
+            "repo:${lower(var.github_org)}/${var.github_repo}:*",
+            "repo:${var.github_org}/${lower(var.github_repo)}:*",
+            "repo:${lower(var.github_org)}/${lower(var.github_repo)}:*"
+          ]
         }
       }
     }]
