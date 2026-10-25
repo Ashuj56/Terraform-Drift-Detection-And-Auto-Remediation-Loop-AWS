@@ -34,7 +34,7 @@ env:
   TF_VERSION: "1.5.7"
 
 jobs:
-  # ── Job 1: Detect Drift ────────────────────────────────────────────────────
+  # Job 1: Detect Drift 
   detect-drift:
     name: "Detect Terraform Drift"
     runs-on: ubuntu-latest
@@ -119,7 +119,7 @@ jobs:
           echo "✅ No drift detected at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           echo "Infrastructure matches Terraform state. No remediation needed."
 
-  # ── Job 2: Parse drift + create remediation PR ────────────────────────────
+  # Job 2: Parse drift + create remediation PR 
   remediate-drift:
     name: "Parse Drift & Create Remediation PR"
     runs-on: ubuntu-latest

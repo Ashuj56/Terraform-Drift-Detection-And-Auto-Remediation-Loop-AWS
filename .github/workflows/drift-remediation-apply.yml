@@ -74,8 +74,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --auto \
             --squash \
-            --subject "chore: auto-apply low-risk drift remediation (${{ steps.check.outputs.cycle_id }})"
-          echo "✅ Auto-merge enabled successfully."
+            --subject "chore: auto-apply low-risk drift remediation (${{ steps.check.outputs.cycle_id }})" || echo "::warning::gh pr merge --auto failed. Ensure 'Allow auto-merge' is enabled under Repository Settings -> Pull Requests."
+          echo "Auto-merge configuration step completed."
 
   # ── Job 2: Terraform Apply (post-merge) ──────────────────────────────────────
   apply:
@@ -171,19 +171,18 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
           RISK="${{ steps.risk.outputs.risk_level }}"
           CYCLE_ID="${{ steps.risk.outputs.cycle_id }}"
+          TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
           if [ "$STATUS" = "success" ]; then
             ICON="✅"
-            MESSAGE="Drift remediation applied successfully.\nInfrastructure is now back in sync with Terraform state."
+            MSG="Drift remediation applied successfully. Infrastructure is now back in sync with Terraform state."
           else
             ICON="❌"
-            MESSAGE="Drift remediation FAILED. Check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for error logs."
+            MSG="Drift remediation FAILED. Check the workflow run for error logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
+
+          COMMENT_BODY=$(printf "%s **Remediation %s** (Cycle: \`%s\` | Risk: %s)\n\n%s\n\nReconciliation completed at: %s" "$ICON" "$STATUS" "$CYCLE_ID" "$RISK" "$MSG" "$TIMESTAMP")
 
           gh pr comment "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
-            --body "${ICON} **Remediation ${STATUS}** (Cycle: \`${CYCLE_ID}\` | Risk: ${RISK})
-
-${MESSAGE}
-
-Reconciliation completed at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            --body "$COMMENT_BODY"
