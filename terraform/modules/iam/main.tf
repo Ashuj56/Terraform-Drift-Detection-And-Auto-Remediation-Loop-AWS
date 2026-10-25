@@ -101,9 +101,10 @@ resource "aws_iam_role" "drift_detection" {
         StringLike = {
           "token.actions.githubusercontent.com:sub" = [
             "repo:${var.github_org}/${var.github_repo}:*",
-            "repo:${lower(var.github_org)}/${var.github_repo}:*",
-            "repo:${var.github_org}/${lower(var.github_repo)}:*",
-            "repo:${lower(var.github_org)}/${lower(var.github_repo)}:*"
+            "repo:${var.github_org}*/${var.github_repo}*:*",
+            "repo:${lower(var.github_org)}*/${var.github_repo}*:*",
+            "repo:${lower(var.github_org)}*/${lower(var.github_repo)}*:*",
+            "repo:${var.github_org}@177546286/${var.github_repo}@1432545657:*"
           ]
         }
       }
@@ -179,9 +180,10 @@ resource "aws_iam_role" "drift_remediation" {
         StringLike = {
           "token.actions.githubusercontent.com:sub" = [
             "repo:${var.github_org}/${var.github_repo}:*",
-            "repo:${lower(var.github_org)}/${var.github_repo}:*",
-            "repo:${var.github_org}/${lower(var.github_repo)}:*",
-            "repo:${lower(var.github_org)}/${lower(var.github_repo)}:*"
+            "repo:${var.github_org}*/${var.github_repo}*:*",
+            "repo:${lower(var.github_org)}*/${var.github_repo}*:*",
+            "repo:${lower(var.github_org)}*/${lower(var.github_repo)}*:*",
+            "repo:${var.github_org}@177546286/${var.github_repo}@1432545657:*"
           ]
         }
       }
